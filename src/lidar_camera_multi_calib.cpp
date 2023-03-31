@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <experimental/filesystem>
 #include <opencv2/core/eigen.hpp>
 
 using namespace std;
@@ -12,6 +13,8 @@ using namespace std;
 string image_path;
 string pcd_path;
 string result_path;
+string output; 
+bool use_display;
 int data_num;
 
 // Camera config
@@ -179,12 +182,14 @@ void roughCalib(std::vector<Calibration> &calibs, Vector6d &calib_params,
           calib_params[0] = test_params[0];
           calib_params[1] = test_params[1];
           calib_params[2] = test_params[2];
-          calibs[0].buildVPnp(calib_params, match_dis, true,
+          calibs[0].buildVPnp(calib_params, match_dis, use_display,
                               calibs[0].rgb_egde_cloud_,
                               calibs[0].plane_line_cloud_, pnp_list);
           cv::Mat projection_img = calibs[0].getProjectionImg(calib_params);
-          cv::imshow("Rough Optimization", projection_img);
-          cv::waitKey(50);
+          if(use_display){
+            cv::imshow("Rough Optimization", projection_img);
+            cv::waitKey(50);
+          }
         }
       }
     }
@@ -198,6 +203,8 @@ int main(int argc, char **argv) {
   nh.param<string>("common/image_path", image_path, "");
   nh.param<string>("common/pcd_path", pcd_path, "");
   nh.param<string>("common/result_path", result_path, "");
+  nh.param<string>("common/output", output, "");
+  use_display = output.compare("display") == 0;
   nh.param<int>("common/data_num", data_num, 1);
   nh.param<vector<double>>("camera/camera_matrix", camera_matrix,
                            vector<double>());
@@ -255,14 +262,18 @@ int main(int argc, char **argv) {
   calib_params[4] = T[1];
   calib_params[5] = T[2];
   cv::Mat init_img = calibs[0].getProjectionImg(calib_params);
-  cv::imshow("Initial extrinsic", init_img);
-  cv::waitKey(1000);
+  if(use_display){
+    cv::imshow("Initial extrinsic", init_img);
+    cv::waitKey(1000);
+  }
   if (use_rough_calib) {
     roughCalib(calibs, calib_params, DEG2RAD(0.2), 40);
   }
   cv::Mat test_img = calibs[0].getProjectionImg(calib_params);
-  cv::imshow("After rough extrinsic", test_img);
-  cv::waitKey(1000);
+  if(use_display){
+    cv::imshow("After rough extrinsic", test_img);
+    cv::waitKey(1000);
+  }
   int iter = 0;
   // Maximum match distance threshold: 15 pixels
   // If initial extrinsic lead to error over 15 pixels, the algorithm will not
@@ -279,7 +290,7 @@ int main(int argc, char **argv) {
       int vpnp_size = 0;
       for (size_t i = 0; i < data_num; i++) {
         std::vector<VPnPData> vpnp_list;
-        calibs[i].buildVPnp(calib_params, dis_threshold, true,
+        calibs[i].buildVPnp(calib_params, dis_threshold, use_display,
                             calibs[i].rgb_egde_cloud_,
                             calibs[i].plane_line_cloud_, vpnp_list);
         vpnp_list_vect.push_back(vpnp_list);
@@ -288,8 +299,10 @@ int main(int argc, char **argv) {
       std::cout << "Iteration:" << iter++ << " Dis:" << dis_threshold
                 << " pnp size: " << vpnp_size << std::endl;
       cv::Mat projection_img = calibs[0].getProjectionImg(calib_params);
-      cv::imshow("Optimization", projection_img);
-      cv::waitKey(100);
+      if(use_display){
+        cv::imshow("Optimization", projection_img);
+        cv::waitKey(100);
+      }
       Eigen::Vector3d euler_angle(calib_params[0], calib_params[1],
                                   calib_params[2]);
       Eigen::Matrix3d opt_init_R;
@@ -376,8 +389,10 @@ int main(int argc, char **argv) {
   }
   outfile << 0 << "," << 0 << "," << 0 << "," << 1 << std::endl;
   cv::Mat opt_img = calibs[0].getProjectionImg(calib_params);
-  cv::imshow("Optimization result", opt_img);
-  cv::waitKey(1000);
+  if(use_display){
+    cv::imshow("Optimization result", opt_img);
+    cv::waitKey(1000);
+  }
   Eigen::Matrix3d init_rotation;
   init_rotation << 0, -1.0, 0, 0, 0, -1.0, 1, 0, 0;
   Eigen::Matrix3d adjust_rotation;

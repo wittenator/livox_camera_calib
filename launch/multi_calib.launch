@@ -4,12 +4,6 @@
     pkg="livox_camera_calib"
     type="lidar_camera_multi_calib"
     name="lidar_camera_multi_calib"
-    output="screen"
-  />
-  <node 
-    pkg="rviz"
-    type="rviz"
-    name="rviz"
-    args="-d $(find livox_camera_calib)/rviz_cfg/calib.rviz"
+    output="log"
   />
 </launch>

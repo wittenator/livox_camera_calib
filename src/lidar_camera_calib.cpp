@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <experimental/filesystem>
 #include <opencv2/core/eigen.hpp>
 
 using namespace std;
@@ -12,6 +13,9 @@ using namespace std;
 string image_file;
 string pcd_file;
 string result_file;
+string result_path;
+string output;
+bool use_display;
 
 // Camera config
 vector<double> camera_matrix;
@@ -176,12 +180,15 @@ void roughCalib(Calibration &calibra, Vector6d &calib_params,
           calib_params[0] = test_params[0];
           calib_params[1] = test_params[1];
           calib_params[2] = test_params[2];
-          calibra.buildVPnp(calib_params, match_dis, true,
+          calibra.buildVPnp(calib_params, match_dis, use_display,
                             calibra.rgb_egde_cloud_, calibra.plane_line_cloud_,
                             pnp_list);
           cv::Mat projection_img = calibra.getProjectionImg(calib_params);
-          cv::imshow("Rough Optimization", projection_img);
-          cv::waitKey(50);
+          if(use_display){
+            cv::imshow("Rough Optimization", projection_img);
+            cv::waitKey(50);
+          }
+          
         }
       }
     }
@@ -196,6 +203,10 @@ int main(int argc, char **argv) {
   nh.param<string>("common/image_file", image_file, "");
   nh.param<string>("common/pcd_file", pcd_file, "");
   nh.param<string>("common/result_file", result_file, "");
+  std::experimental::filesystem::path result_path = result_file;
+  result_path = result_path.parent_path();
+  nh.param<string>("common/output", output, "");
+  use_display = output.compare("display") == 0;
   std::cout << "pcd_file path:" << pcd_file << std::endl;
   nh.param<vector<double>>("camera/camera_matrix", camera_matrix,
                            vector<double>());
@@ -253,16 +264,21 @@ int main(int argc, char **argv) {
   pub_cloud.header.frame_id = "livox";
   calibra.init_rgb_cloud_pub_.publish(pub_cloud);
   cv::Mat init_img = calibra.getProjectionImg(calib_params);
-  cv::imshow("Initial extrinsic", init_img);
-  cv::imwrite("/home/ycj/data/calib/init.png", init_img);
-  cv::waitKey(1000);
-
+  if(use_display){
+    cv::imshow("Initial extrinsic", init_img);
+    cv::waitKey(1000);
+  }
+  cv::imwrite((result_path/"init.png").string(), init_img);
+  std::cout << (result_path/"init.png").string() << std::endl;
   if (use_rough_calib) {
     roughCalib(calibra, calib_params, DEG2RAD(0.1), 50);
   }
   cv::Mat test_img = calibra.getProjectionImg(calib_params);
-  cv::imshow("After rough extrinsic", test_img);
-  cv::waitKey(1000);
+  if(use_display){
+    cv::imshow("After rough extrinsic", test_img);
+    cv::waitKey(1000);
+  }
+  cv::imwrite((result_path/"test.png").string(), test_img);
   int iter = 0;
   // Maximum match distance threshold: 15 pixels
   // If initial extrinsic lead to error over 15 pixels, the algorithm will not
@@ -275,11 +291,11 @@ int main(int argc, char **argv) {
     // For each distance, do twice optimization
     for (int cnt = 0; cnt < 2; cnt++) {
       if (use_vpnp) {
-        calibra.buildVPnp(calib_params, dis_threshold, true,
+        calibra.buildVPnp(calib_params, dis_threshold, use_display,
                           calibra.rgb_egde_cloud_, calibra.plane_line_cloud_,
                           vpnp_list);
       } else {
-        calibra.buildPnp(calib_params, dis_threshold, true,
+        calibra.buildPnp(calib_params, dis_threshold, use_display,
                          calibra.rgb_egde_cloud_, calibra.plane_line_cloud_,
                          pnp_list);
       }
@@ -287,8 +303,11 @@ int main(int argc, char **argv) {
                 << " pnp size:" << vpnp_list.size() << std::endl;
 
       cv::Mat projection_img = calibra.getProjectionImg(calib_params);
-      cv::imshow("Optimization", projection_img);
-      cv::waitKey(100);
+      if(use_display){
+        cv::imshow("Optimization", projection_img);
+        cv::waitKey(100);
+      }
+      cv::imwrite((result_path/"projection.png").string(), projection_img);
       Eigen::Vector3d euler_angle(calib_params[0], calib_params[1],
                                   calib_params[2]);
       Eigen::Matrix3d opt_init_R;
@@ -380,9 +399,12 @@ int main(int argc, char **argv) {
   }
   outfile << 0 << "," << 0 << "," << 0 << "," << 1 << std::endl;
   cv::Mat opt_img = calibra.getProjectionImg(calib_params);
-  cv::imshow("Optimization result", opt_img);
-  cv::imwrite("/home/ycj/data/calib/opt.png", opt_img);
-  cv::waitKey(1000);
+  if(use_display){
+    cv::imshow("Optimization result", opt_img);
+    cv::waitKey(1000);
+  }
+  std::cout << (result_path/"opt.png").string() << std::endl;
+  cv::imwrite((result_path/"opt.png").string(), opt_img);
   Eigen::Matrix3d init_rotation;
   init_rotation << 0, -1.0, 0, 0, 0, -1.0, 1, 0, 0;
   Eigen::Matrix3d adjust_rotation;
